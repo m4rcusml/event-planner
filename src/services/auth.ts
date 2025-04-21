@@ -11,6 +11,7 @@ export function useGoogleAuth() {
     webClientId: '956379056954-mqv2dml9jpjtoaol1japngks2ol0v4mj.apps.googleusercontent.com',
     androidClientId: '956379056954-5jft7a847p8vdmqn74vs4e2mqbo5coao.apps.googleusercontent.com',
     // iosClientId: 'SEU_IOS_CLIENT_ID',
+    scopes: ['profile', 'email'],
   });
 
   const [user, setUser] = useState<any>(null);

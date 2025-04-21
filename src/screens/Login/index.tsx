@@ -9,12 +9,15 @@ import { Envelope, FacebookLogo, GoogleLogo, LinkedinLogo, XLogo } from 'phospho
 import { Button } from '@/components/Button'
 import { NavigationProp, useNavigation } from '@react-navigation/native'
 import { RootStackParamList } from '@/routes/stack.routes'
-import { getAuth, signInWithEmailAndPassword, GoogleAuthProvider, FacebookAuthProvider, signInWithPopup } from 'firebase/auth'
+import { getAuth, signInWithEmailAndPassword, FacebookAuthProvider, signInWithPopup } from 'firebase/auth'
 import { useGoogleAuth } from '@/services/auth'
+import { useState } from 'react'
 
 export function Login() {
   const { navigate } = useNavigation<NavigationProp<RootStackParamList>>();
   const { signIn, user } = useGoogleAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   const auth = getAuth()
 
@@ -27,12 +30,21 @@ export function Login() {
   }
 
   function login() {
-    signInWithEmailAndPassword(auth, 'email', 'password')
+    signInWithEmailAndPassword(auth, email, password)
       .then(() => {
         navigate('Home')
       })
-      .catch(() => {
-        alert('Erro ao logar')
+      .catch((error) => {
+        console.log(error)
+        if (error.code === 'auth/invalid-credential') {
+          alert('Email ou senha incorretos')
+        } else if (error.code === 'auth/invalid-email') {
+          alert('Email inválido')
+        } else if (error.code === 'auth/user-disabled') {
+          alert('Usuário desabilitado')
+        } else {
+          alert('Erro ao fazer login. Tente novamente mais tarde.')
+        }
       })
   }
 
@@ -41,12 +53,21 @@ export function Login() {
       .then(() => {
         navigate('Home')
       })
-      .catch(() => {
-        alert('Erro ao logar com Google')
+      .catch((error) => {
+        console.log(error)
+        if (error.code === 'auth/popup-closed-by-user') {
+          alert('Login cancelado')
+        } else if (error.code === 'auth/popup-blocked') {
+          alert('Pop-up bloqueado pelo navegador')
+        } else {
+          alert('Erro ao fazer login com Google. Tente novamente mais tarde.')
+        }
       })
   }
 
   function loginWithFacebook() {
+    loginWithX()
+    return
     const provider = new FacebookAuthProvider()
     signInWithPopup(auth, provider)
       .then(() => {
@@ -80,11 +101,15 @@ export function Login() {
           label='Email'
           placeholder='Digite seu email'
           icon={Envelope}
+          value={email}
+          onChangeText={setEmail}
         />
         <Field
           label='Senha'
           placeholder='Digite sua senha'
           isPassword
+          value={password}
+          onChangeText={setPassword}
         />
 
         <MyText style={styles.forgot} onPress={forgotPassword}>Esqueci minha senha</MyText>
@@ -111,10 +136,9 @@ export function Login() {
         </View>
 
         <MyText style={styles.register}>
-          Não tem conta? <MyText onPress={register} variant='button'>Cadastre-se</MyText>
+          Não tem conta? <MyText onPress={register} variant='button'>Cadastre-se</MyText>
         </MyText>
       </ScrollView>
     </ImageBackground>
   )
 }
-
