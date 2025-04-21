@@ -32,7 +32,7 @@ export function Login() {
   function login() {
     signInWithEmailAndPassword(auth, email, password)
       .then(() => {
-        navigate('Home')
+        navigate('logged')
       })
       .catch((error) => {
         console.log(error)
@@ -51,7 +51,7 @@ export function Login() {
   function loginWithGoogle() {
     signIn()
       .then(() => {
-        navigate('Home')
+        navigate('logged')
       })
       .catch((error) => {
         console.log(error)
@@ -71,7 +71,7 @@ export function Login() {
     const provider = new FacebookAuthProvider()
     signInWithPopup(auth, provider)
       .then(() => {
-        navigate('Home')
+        navigate('logged')
       })
       .catch(() => {
         alert('Erro ao logar com Facebook')
@@ -79,11 +79,11 @@ export function Login() {
   }
 
   function loginWithX() {
-    navigate('Home')
+    navigate('logged')
   }
 
   function loginWithLinkedin() {
-    navigate('Home')
+    navigate('logged')
   }
 
   return (

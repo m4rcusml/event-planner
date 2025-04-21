@@ -6,7 +6,7 @@ export default function App() {
   return (
     <View style={{ flex: 1 }}>
       <Routes />
-      <StatusBar style="auto" />
+      <StatusBar style="auto" backgroundColor='#D54E21' />
     </View>
   );
 }
