@@ -1,32 +1,40 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
-import { UserCircle } from 'phosphor-react-native';
+import { ArrowLeft, UserCircle } from 'phosphor-react-native';
 import { MyText } from './MyText';
 
-export function Header() {
+export function Header({ welcomeUser = true, useDrawer = true }: { welcomeUser?: boolean, useDrawer?: boolean }) {
   const { top } = useSafeAreaInsets();
   const navigation = useNavigation<DrawerNavigationProp<any>>();
 
   return (
     <View style={[styles.container, { paddingTop: top + 16 }]}>
       <View style={[styles.userContainer, { justifyContent: 'space-between' }]}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <UserCircle size={42} color="#FFF" weight='fill' />
-          <View style={{ gap: 2 }}>
-            <MyText color='white' variant="subtitle1">BEM VINDO</MyText>
-            <MyText color='white' variant="h5">USUÁRIO!</MyText>
-          </View>
-        </View>
-        <Feather
+        <Pressable
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+          onPress={() => welcomeUser ? navigation.navigate('profile') : navigation.goBack()}
+        >
+          {welcomeUser ? <>
+            <UserCircle size={42} color="#FFF" weight='fill' />
+            <View style={{ gap: 2 }}>
+              <MyText color='white' variant="subtitle1">BEM VINDO</MyText>
+              <MyText color='white' variant="h5">USUÁRIO!</MyText>
+            </View>
+          </> : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <ArrowLeft size={24} color="#FFF" weight="bold" />
+            <MyText color='white' variant="h4">Voltar</MyText>
+          </View>}
+        </Pressable>
+        {useDrawer && <Feather
           name="menu"
           size={24}
           color="#FFF"
           onPress={() => navigation.openDrawer()}
-        />
+        />}
       </View>
     </View>
   );
