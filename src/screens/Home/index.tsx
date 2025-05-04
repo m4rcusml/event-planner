@@ -6,10 +6,15 @@ import {
   TextInput,
   TouchableOpacity,
   ImageBackground,
+  Alert,
 } from 'react-native';
 import { Calendar, Clock, MagnifyingGlass, Plus, UsersThree } from 'phosphor-react-native';
-import { useNavigation } from '@react-navigation/native';
+import { NavigationProp, useNavigation } from '@react-navigation/native';
 import { styles } from './styles';
+import { RootStackParamList } from '@/routes/stack.routes';
+import { Timestamp } from 'firebase/firestore';
+import { getUserEvents } from '@/firebase/firestoreUtils';
+import { Event } from '@/@types/events';
 
 // Calendar data
 const weekDays = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
@@ -26,7 +31,10 @@ const reminders = [
 ];
 
 export function Home() {
-  const navigation = useNavigation();
+  const [events, setEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const [month, setMonth] = useState('JANEIRO');
   const [year, setYear] = useState('2025');
 
@@ -112,6 +120,45 @@ export function Home() {
     return cells;
   };
 
+  // Function to fetch events from Firestore
+  const fetchEvents = async () => {
+    try {
+      setLoading(true);
+      const allEvents = await getUserEvents();
+
+      // Filter events to only include those after the current date
+      const now = new Date();
+      const upcomingEvents = allEvents.filter(event => {
+        // Convert Firestore Timestamp to JavaScript Date if needed
+        const eventDate = event.date instanceof Timestamp
+          ? event.date.toDate()
+          : new Date(event.date as any);
+
+        return eventDate >= now;
+      });
+
+      // Sort events by date (closest first)
+      upcomingEvents.sort((a, b) => {
+        const dateA = a.date instanceof Timestamp ? a.date.toDate() : new Date(a.date as any);
+        const dateB = b.date instanceof Timestamp ? b.date.toDate() : new Date(b.date as any);
+        return dateA.getTime() - dateB.getTime();
+      });
+
+      setEvents(upcomingEvents);
+    } catch (error) {
+      console.error('Error fetching events:', error);
+      Alert.alert('Erro', 'Não foi possível carregar os eventos. Tente novamente.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  // Load events when component mounts
+  useEffect(() => {
+    fetchEvents();
+  }, []);
+
   return (
     <View style={styles.container}>
       <ImageBackground
@@ -166,13 +213,13 @@ export function Home() {
             </View>
             {/* Action Buttons - First Row */}
             <View style={styles.actionButtonsRow}>
-              <TouchableOpacity style={styles.primaryButton}>
+              <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate('addEvent')}>
                 <View style={styles.buttonIconContainer}>
                   <Plus size={18} color="#FFF" weight="bold" />
                 </View>
                 <Text style={styles.buttonText}>CRIAR EVENTO</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.primaryButton}>
+              <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate('guests')}>
                 <View style={styles.buttonIconContainer}>
                   <UsersThree size={18} color="#FFF" weight="bold" />
                 </View>
@@ -181,13 +228,13 @@ export function Home() {
             </View>
             {/* Action Buttons - Second Row */}
             <View style={styles.actionButtonsRow}>
-              <TouchableOpacity style={styles.primaryButton}>
+              <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate('events')}>
                 <View style={styles.buttonIconContainer}>
                   <Calendar size={18} color="#FFF" weight="bold" />
                 </View>
                 <Text style={styles.buttonText}>MEUS EVENTOS</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.primaryButton}>
+              <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate('oldEvents')}>
                 <View style={styles.buttonIconContainer}>
                   <Clock size={18} color="#FFF" weight="bold" />
                 </View>
@@ -203,11 +250,19 @@ export function Home() {
                 <Text style={[styles.reminderHeaderText, styles.reminderTimeHeader]}>HORA</Text>
               </View>
               {/* Reminders List */}
-              {reminders.map((reminder, index) => (
+              {events.map((event, index) => (
                 <View key={index} style={styles.reminderItem}>
-                  <Text style={[styles.reminderText, styles.reminderTitle]}>{reminder.title}</Text>
-                  <Text style={[styles.reminderText, styles.reminderDay]}>{reminder.day}</Text>
-                  <Text style={[styles.reminderText, styles.reminderTime]}>{reminder.time}</Text>
+                  <Text style={[styles.reminderText, styles.reminderTitle]}>{event.title}</Text>
+                    <Text style={[styles.reminderText, styles.reminderDay]}>
+                    {event.date instanceof Timestamp
+                      ? event.date.toDate().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+                      : new Date(event.date as any).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                    </Text>
+                  <Text style={[styles.reminderText, styles.reminderTime]}>
+                    {event.date instanceof Timestamp
+                      ? event.date.toDate().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                      : new Date(event.date as any).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
                 </View>
               ))}
             </View>

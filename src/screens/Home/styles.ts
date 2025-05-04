@@ -200,6 +200,7 @@ export const styles = StyleSheet.create({
   reminderText: {
     fontSize: 12,
     color: '#FF914D',
+    fontWeight: '800',
   },
   reminderTitle: {
     flex: 3,

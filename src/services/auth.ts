@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
-import { auth } from './firebaseConfig';
+import { auth } from '../firebase/firebaseConfig';
 
 WebBrowser.maybeCompleteAuthSession();
 

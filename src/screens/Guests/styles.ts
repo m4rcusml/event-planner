@@ -21,7 +21,7 @@ export const styles = StyleSheet.create({
     margin: 16,
     padding: 16,
     borderRadius: 20,
-    gap: 20
+    gap: 10
   },
   searchContainer: {
     flexDirection: 'row',

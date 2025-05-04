@@ -11,17 +11,29 @@ export const styles = StyleSheet.create({
   backgroundImage: {
     flex: 1,
     width: '100%',
-    height: '100%',
   },
   scrollView: {
     flex: 1,
+  },
+  loaderContainer: {
+    marginTop: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyContainer: {
+    marginTop: 50,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 10,
   },
   contentContainer: {
     backgroundColor: '#fffc',
     margin: 16,
     padding: 16,
     borderRadius: 20,
-    gap: 20
+    gap: 10
   },
   searchContainer: {
     flexDirection: 'row',

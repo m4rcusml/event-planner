@@ -5,18 +5,25 @@ import { ForgotPassword } from '@/screens/ForgotPassword'
 import DrawerRoutes from './drawer.routes'
 import { Profile } from '@/screens/Profile'
 import { Header } from '@/components/Header'
+import { Events } from '@/screens/Events'
+import { OldEvents } from '@/screens/OldEvents'
+import { Guests } from '@/screens/Guests'
+import { AddEvent } from '@/screens/AddEvent'
+import { EventSuccess } from '@/screens/EventSuccess'
+import { AddGuests } from '@/screens/AddGuest'
 
 export type RootStackParamList = {
   Login: undefined
   Register: undefined
   ForgotPassword: undefined
   logged: undefined
-
   profile: undefined
   events: undefined
-  addEvent: undefined
+  oldEvents: undefined
   guests: undefined
-  addGuest: undefined
+  addEvent: undefined
+  eventSuccess: undefined
+  addGuest: { eventId: string }
 }
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
@@ -36,6 +43,12 @@ export function StackRoutes() {
       <Stack.Screen name="ForgotPassword" component={ForgotPassword} options={{ title: 'Voltar' }} />
       <Stack.Screen name="logged" component={DrawerRoutes} options={{ headerShown: false }} />
       <Stack.Screen name="profile" component={Profile} options={{ title: 'Voltar' }} />
+      <Stack.Screen name="events" component={Events} options={{ title: 'Voltar' }} />
+      <Stack.Screen name="oldEvents" component={OldEvents} options={{ title: 'Voltar' }} />
+      <Stack.Screen name="guests" component={Guests} options={{ title: 'Voltar' }} />
+      <Stack.Screen name="addEvent" component={AddEvent} options={{ title: 'Voltar' }} />
+      <Stack.Screen name="eventSuccess" component={EventSuccess} options={{ headerShown: false }} />
+      <Stack.Screen name="addGuest" component={AddGuests} options={{ title: 'Voltar' }} />
     </Stack.Navigator>
   )
 }
