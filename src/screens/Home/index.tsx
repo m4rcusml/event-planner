@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,11 @@ import {
   Alert,
 } from 'react-native';
 import { Calendar, Clock, MagnifyingGlass, Plus, UsersThree } from 'phosphor-react-native';
-import { NavigationProp, useNavigation } from '@react-navigation/native';
+import { NavigationProp, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { styles } from './styles';
 import { RootStackParamList } from '@/routes/stack.routes';
-import { Timestamp } from 'firebase/firestore';
-import { getUserEvents } from '@/firebase/firestoreUtils';
+import { Timestamp, collection, onSnapshot, query, where } from 'firebase/firestore';
+import { db, auth } from '@/firebase/firebaseConfig';
 import { Event } from '@/@types/events';
 
 // Calendar data
@@ -23,13 +23,6 @@ const months = [
   'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'
 ];
 
-// Mock data for reminders
-const reminders = [
-  { title: 'REUNIÃO DO TRABALHO', day: '22/02', time: '07:00' },
-  { title: 'ANIVERSÁRIO DA ISIS', day: '25/02', time: '10:00' },
-  { title: 'CASAMENTO DA MILENA', day: '30/02', time: '17:00' },
-];
-
 export function Home() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,12 +30,112 @@ export function Home() {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const [month, setMonth] = useState('JANEIRO');
   const [year, setYear] = useState('2025');
+  const unsubscribeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const currentDate = new Date();
     setMonth(months[currentDate.getMonth()]);
     setYear(currentDate.getFullYear().toString());
   }, []);
+
+  // Função para se inscrever em atualizações em tempo real dos eventos
+  const subscribeToEvents = () => {
+    try {
+      setLoading(true);
+      const user = auth.currentUser;
+      
+      if (!user) {
+        console.error('No authenticated user found');
+        setLoading(false);
+        return;
+      }
+
+      // Criar uma query para buscar eventos do usuário atual
+      const eventsRef = collection(db, 'events');
+      const q = query(eventsRef, where('userId', '==', user.uid));
+      
+      // Inscrever-se para atualizações em tempo real
+      const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const eventsData: Event[] = [];
+        
+        querySnapshot.forEach((doc) => {
+          const eventData = doc.data() as Event;
+          eventsData.push({
+            ...eventData,
+            id: doc.id
+          });
+        });
+        
+        // Filtrar eventos futuros
+        const now = new Date();
+        const upcomingEvents = eventsData.filter(event => {
+          const eventDate = event.date instanceof Timestamp
+            ? event.date.toDate()
+            : new Date(event.date as any);
+          
+          return eventDate >= now;
+        });
+        
+        // Ordenar por data (mais próximos primeiro)
+        upcomingEvents.sort((a, b) => {
+          const dateA = a.date instanceof Timestamp ? a.date.toDate() : new Date(a.date as any);
+          const dateB = b.date instanceof Timestamp ? b.date.toDate() : new Date(b.date as any);
+          return dateA.getTime() - dateB.getTime();
+        });
+        
+        setEvents(upcomingEvents);
+        setLoading(false);
+        setRefreshing(false);
+        console.log(`Subscribed to ${upcomingEvents.length} upcoming events in real-time`);
+      }, (error) => {
+        console.error('Error subscribing to events:', error);
+        Alert.alert('Erro', 'Não foi possível monitorar os eventos em tempo real. Tente novamente.');
+        setLoading(false);
+        setRefreshing(false);
+      });
+      
+      // Armazenar a função de unsubscribe para limpar depois
+      unsubscribeRef.current = unsubscribe;
+      
+    } catch (error) {
+      console.error('Error setting up events subscription:', error);
+      Alert.alert('Erro', 'Não foi possível configurar o monitoramento de eventos. Tente novamente.');
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  // Inscrever-se quando o componente montar
+  useEffect(() => {
+    subscribeToEvents();
+    
+    // Limpar a inscrição quando o componente desmontar
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+        console.log('Unsubscribed from events real-time updates');
+      }
+    };
+  }, []);
+
+  // Reinscrever-se quando a tela receber foco novamente
+  useFocusEffect(
+    React.useCallback(() => {
+      // Se já existe uma inscrição, cancele-a primeiro
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+        unsubscribeRef.current = null;
+      }
+      
+      // Inscrever-se novamente
+      subscribeToEvents();
+      
+      return () => {
+        // Não precisa fazer nada aqui, pois queremos manter a inscrição
+        // quando a tela perde o foco, para detectar atualizações em background
+      };
+    }, [])
+  );
 
   const renderCalendarDay = (day: number) => {
     const today = new Date();
@@ -119,45 +212,6 @@ export function Home() {
 
     return cells;
   };
-
-  // Function to fetch events from Firestore
-  const fetchEvents = async () => {
-    try {
-      setLoading(true);
-      const allEvents = await getUserEvents();
-
-      // Filter events to only include those after the current date
-      const now = new Date();
-      const upcomingEvents = allEvents.filter(event => {
-        // Convert Firestore Timestamp to JavaScript Date if needed
-        const eventDate = event.date instanceof Timestamp
-          ? event.date.toDate()
-          : new Date(event.date as any);
-
-        return eventDate >= now;
-      });
-
-      // Sort events by date (closest first)
-      upcomingEvents.sort((a, b) => {
-        const dateA = a.date instanceof Timestamp ? a.date.toDate() : new Date(a.date as any);
-        const dateB = b.date instanceof Timestamp ? b.date.toDate() : new Date(b.date as any);
-        return dateA.getTime() - dateB.getTime();
-      });
-
-      setEvents(upcomingEvents);
-    } catch (error) {
-      console.error('Error fetching events:', error);
-      Alert.alert('Erro', 'Não foi possível carregar os eventos. Tente novamente.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  // Load events when component mounts
-  useEffect(() => {
-    fetchEvents();
-  }, []);
 
   return (
     <View style={styles.container}>
@@ -250,21 +304,29 @@ export function Home() {
                 <Text style={[styles.reminderHeaderText, styles.reminderTimeHeader]}>HORA</Text>
               </View>
               {/* Reminders List */}
-              {events.map((event, index) => (
-                <View key={index} style={styles.reminderItem}>
-                  <Text style={[styles.reminderText, styles.reminderTitle]}>{event.title}</Text>
+              {events.length > 0 ? (
+                events.map((event, index) => (
+                  <View key={index} style={styles.reminderItem}>
+                    <Text style={[styles.reminderText, styles.reminderTitle]}>{event.title}</Text>
                     <Text style={[styles.reminderText, styles.reminderDay]}>
-                    {event.date instanceof Timestamp
-                      ? event.date.toDate().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-                      : new Date(event.date as any).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                      {event.date instanceof Timestamp
+                        ? event.date.toDate().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+                        : new Date(event.date as any).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                     </Text>
-                  <Text style={[styles.reminderText, styles.reminderTime]}>
-                    {event.date instanceof Timestamp
-                      ? event.date.toDate().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                      : new Date(event.date as any).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                    <Text style={[styles.reminderText, styles.reminderTime]}>
+                      {event.date instanceof Timestamp
+                        ? event.date.toDate().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                        : new Date(event.date as any).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                  </View>
+                ))
+              ) : (
+                <View style={styles.reminderItem}>
+                  <Text style={[styles.reminderText, { textAlign: 'center', flex: 1 }]}>
+                    {loading ? "Carregando..." : "Sem eventos futuros"}
                   </Text>
                 </View>
-              ))}
+              )}
             </View>
           </View>
         </ScrollView>

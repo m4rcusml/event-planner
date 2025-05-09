@@ -19,7 +19,7 @@ import { CaretLeft, Warning, MapPin, Clock } from 'phosphor-react-native';
 import { RootStackParamList } from '@/routes/stack.routes';
 import { Timestamp } from 'firebase/firestore';
 import { auth } from '@/firebase/firebaseConfig';
-import { saveEvent } from '@/firebase/firestoreUtils';
+import { addEvent } from '@/firebase/firestoreUtils';
 import { Event } from '@/@types/events';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -113,7 +113,7 @@ export const AddEvent: React.FC = () => {
       };
 
       // Usando a função utilitária para salvar o evento
-      const eventId = await saveEvent(eventData);
+      const eventId = await addEvent(eventData);
 
       // Feedback e navegação
       Alert.alert(
@@ -227,17 +227,6 @@ export const AddEvent: React.FC = () => {
                   />
                   <MapPin size={20} color="#FF7F50" weight="duotone" style={styles.inputIcon} />
                 </View>
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Enviar convite</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Informe os e-mails separados por vírgula"
-                  placeholderTextColor="#999"
-                  value={guests}
-                  onChangeText={setGuests}
-                />
               </View>
 
               <TouchableOpacity

@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet, Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Routes } from '@/routes';
-import { initPersistence, checkFirestoreConnection, auth } from '@/firebase/firebaseConfig';
+import { auth } from '@/firebase/firebaseConfig';
 import { setupNetworkMonitoring } from '@/utils/networkCheck';
 import { onAuthStateChanged } from 'firebase/auth';
 import { LogBox } from 'react-native';
@@ -33,18 +33,6 @@ export default function App() {
         
         // 1. Set up network monitoring first
         const unsubscribeNetInfo = setupNetworkMonitoring();
-        
-        // 2. Try to enable persistence (but continue if it fails)
-        const persistenceEnabled = await initPersistence();
-        console.log("Persistence enabled:", persistenceEnabled);
-        
-        // 3. Try to verify Firestore connection
-        const isConnected = await checkFirestoreConnection();
-        
-        if (!isConnected) {
-          console.warn("Firebase connection check failed - continuing in degraded mode");
-          setInitError("Erro de conexão com o Firestore. Algumas funcionalidades podem estar indisponíveis.");
-        }
         
         // Even with errors, we'll let the app start
         setIsFirebaseReady(true);

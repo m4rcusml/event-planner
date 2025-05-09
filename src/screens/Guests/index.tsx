@@ -1,4 +1,4 @@
-// Arquivo: index.tsx (componente Guests)
+// src/screens/Guests/index.tsx
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -9,109 +9,135 @@ import {
 import { styles } from './styles';
 import { MyText } from '@/components/MyText';
 import GuestList from '@/components/GuestList';
-import { doc, Timestamp, updateDoc } from 'firebase/firestore';
-import { getUserEvents } from '@/firebase/firestoreUtils';
+import { Timestamp } from 'firebase/firestore';
+import { 
+  getUserEvents, 
+  updateGuestStatus, 
+  removeGuest 
+} from '@/firebase/firestoreUtils';
 import { Event } from '@/@types/events';
-import { db } from '@/firebase/firebaseConfig';
+import NetInfo from '@react-native-community/netinfo';
 
 export function Guests() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
 
+  // Monitora o estado da conexão
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      setIsConnected(state.isConnected ?? false);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  // Função para lidar com mudança de status do convidado
   const handleGuestStatusChange = async (eventId: string, guestEmail: string, confirmed: boolean) => {
     try {
-      // Find and update the event in the local state first
-      const updatedEvents = events.map(event => {
+      // Atualiza a UI imediatamente para melhor experiência do usuário
+      setEvents(currentEvents => currentEvents.map(event => {
         if (event.id === eventId) {
-          // Create a completely new guests array with the updated status
           const updatedGuests = event.guests?.map(guest =>
             guest.email === guestEmail ? { ...guest, confirmed } : guest
           ) || [];
           return { ...event, guests: updatedGuests };
         }
         return event;
-      });
+      }));
       
-      // Update the state immediately for better UX
-      setEvents(updatedEvents);
-      
-      // Update in Firebase
-      const eventRef = doc(db, 'events', eventId);
-      
-      // Find the event to get the current guests list
-      const eventToUpdate = events.find(e => e.id === eventId);
-      if (!eventToUpdate || !eventToUpdate.guests) {
-        throw new Error('Event or guests not found');
+      // Exibe notificação se dispositivo estiver offline
+      if (!isConnected) {
+        Alert.alert(
+          'Modo Offline', 
+          'Suas alterações serão sincronizadas quando você voltar a ficar online.'
+        );
       }
       
-      // Create a new guests array with the updated status
-      const updatedGuests = eventToUpdate.guests.map(guest => {
-        if (guest.email === guestEmail) {
-          return { email: guest.email, confirmed };
-        }
-        return guest;
-      });
+      // Tenta atualizar no Firebase
+      const success = await updateGuestStatus(eventId, guestEmail, confirmed);
       
-      // Update the entire guests array in one operation
-      await updateDoc(eventRef, {
-        guests: updatedGuests
-      });
+      if (!success && isConnected) {
+        throw new Error('Falha ao atualizar o status do convidado');
+      }
       
     } catch (error) {
       console.error('Error updating guest status:', error);
-      Alert.alert('Erro', 'Não foi possível atualizar o status do convidado.');
-      // Revert the local state back in case of error
-      fetchEvents();
+      // Só exibe alerta de erro se estiver online e a operação falhar
+      if (isConnected) {
+        Alert.alert('Erro', 'Não foi possível atualizar o status do convidado.');
+        // Recarrega os dados para restaurar o estado correto
+        fetchEvents();
+      }
     }
   };
 
+  // Função para lidar com remoção de convidado
   const handleRemoveGuest = async (eventId: string, guestEmail: string) => {
     try {
-      // Remove from local state first for immediate UI update
-      const updatedEvents = events.map(event => {
-        if (event.id === eventId) {
-          const updatedGuests = event.guests?.filter(guest => guest.email !== guestEmail) || [];
-          return { ...event, guests: updatedGuests };
-        }
-        return event;
-      });
-      
-      setEvents(updatedEvents);
-      
-      // Get the current event data
-      const eventToUpdate = events.find(e => e.id === eventId);
-      if (!eventToUpdate || !eventToUpdate.guests) {
-        throw new Error('Event or guests not found');
-      }
-      
-      // Filter out the guest to remove
-      const updatedGuests = eventToUpdate.guests.filter(guest => guest.email !== guestEmail);
-      
-      // Update the entire guests array in Firebase
-      const eventRef = doc(db, 'events', eventId);
-      await updateDoc(eventRef, {
-        guests: updatedGuests
-      });
-      
+      // Confirma se o usuário deseja remover o convidado
+      Alert.alert(
+        'Remover Convidado',
+        `Deseja remover o convidado ${guestEmail}?`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { 
+            text: 'Remover', 
+            style: 'destructive',
+            onPress: async () => {
+              // Atualiza a UI imediatamente
+              setEvents(currentEvents => currentEvents.map(event => {
+                if (event.id === eventId) {
+                  const updatedGuests = event.guests?.filter(guest => 
+                    guest.email !== guestEmail
+                  ) || [];
+                  return { ...event, guests: updatedGuests };
+                }
+                return event;
+              }));
+              
+              // Exibe notificação se dispositivo estiver offline
+              if (!isConnected) {
+                Alert.alert(
+                  'Modo Offline', 
+                  'Suas alterações serão sincronizadas quando você voltar a ficar online.'
+                );
+              }
+              
+              // Tenta remover no Firebase
+              const success = await removeGuest(eventId, guestEmail);
+              
+              if (!success && isConnected) {
+                throw new Error('Falha ao remover o convidado');
+              }
+            }
+          }
+        ]
+      );
     } catch (error) {
       console.error('Error removing guest:', error);
-      Alert.alert('Erro', 'Não foi possível remover o convidado.');
-      // Revert the local state back in case of error
-      fetchEvents();
+      // Só exibe alerta de erro se estiver online e a operação falhar
+      if (isConnected) {
+        Alert.alert('Erro', 'Não foi possível remover o convidado.');
+        // Recarrega os dados para restaurar o estado correto
+        fetchEvents();
+      }
     }
   };
 
-  // Function to fetch events from Firestore
+  // Função para buscar eventos do Firestore
   const fetchEvents = async () => {
     try {
       setLoading(true);
       const allEvents = await getUserEvents();
 
-      // Filter events to only include those after the current date
+      // Filtra eventos para incluir apenas aqueles após a data atual
       const now = new Date();
       const upcomingEvents = allEvents.filter(event => {
-        // Convert Firestore Timestamp to JavaScript Date if needed
+        // Converte Timestamp do Firestore para JavaScript Date se necessário
         const eventDate = event.date instanceof Timestamp
           ? event.date.toDate()
           : new Date(event.date as any);
@@ -119,7 +145,7 @@ export function Guests() {
         return eventDate >= now;
       });
 
-      // Sort events by date (closest first)
+      // Ordena eventos por data (mais próximos primeiro)
       upcomingEvents.sort((a, b) => {
         const dateA = a.date instanceof Timestamp ? a.date.toDate() : new Date(a.date as any);
         const dateB = b.date instanceof Timestamp ? b.date.toDate() : new Date(b.date as any);
@@ -136,10 +162,17 @@ export function Guests() {
     }
   };
 
-  // Load events when component mounts
+  // Carrega eventos quando o componente é montado
   useEffect(() => {
     fetchEvents();
   }, []);
+
+  // Sincroniza quando o status da conexão muda de offline para online
+  useEffect(() => {
+    if (isConnected) {
+      fetchEvents();
+    }
+  }, [isConnected]);
 
   return (
     <View style={styles.container}>
@@ -153,25 +186,37 @@ export function Guests() {
               Convidados
             </MyText>
             <MyText variant='subtitle2'>
-              Mostrando somente convidados de evento que não ocorreram
+              Mostrando somente convidados de eventos futuros
             </MyText>
+            
+            {/* Indicador de modo offline */}
+            {!isConnected && (
+              <View style={styles.offlineIndicator}>
+                <MyText variant='body2' style={styles.offlineText}>
+                  Modo offline - suas alterações serão sincronizadas quando você voltar online
+                </MyText>
+              </View>
+            )}
+            
             <View>
-              {events.length > 0 ? (
+              {loading ? (
+                <MyText variant='body1' style={{ textAlign: 'center', marginTop: 20 }}>
+                  Carregando eventos...
+                </MyText>
+              ) : events.length > 0 ? (
                 events.map((event) => (
                   <GuestList
                     key={event.id}
                     title={event.title}
                     eventId={event.id || ''}
                     guests={event.guests || []}
-                    onGuestStatusChange={(id, email, confirmed) => 
-                      handleGuestStatusChange(event.id || '', email, confirmed)}
-                    onRemoveGuest={(id, email) => 
-                      handleRemoveGuest(event.id || '', email)}
+                    onGuestStatusChange={handleGuestStatusChange}
+                    onRemoveGuest={handleRemoveGuest}
                   />
                 ))
               ) : (
                 <MyText variant='body1' style={{ textAlign: 'center', marginTop: 20 }}>
-                  {loading ? 'Carregando eventos...' : 'Nenhum evento encontrado'}
+                  Nenhum evento futuro encontrado
                 </MyText>
               )}
             </View>

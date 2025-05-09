@@ -1,15 +1,18 @@
-// firebaseConfig.ts - Fixed Configuration for Permissions & Persistence
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+// src/firebase/firebaseConfig.ts
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
 import { 
-  getFirestore,
-  doc, 
-  setDoc, 
-  deleteDoc,
-  enableIndexedDbPersistence
-} from "firebase/firestore";
-import { Platform } from "react-native";
+  getFirestore, 
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  memoryLocalCache,
+  CACHE_SIZE_UNLIMITED 
+} from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
+import { Platform } from 'react-native';
 
+// Firebase configuração
 const firebaseConfig = {
   apiKey: "AIzaSyB01TGN61cH45ywxl46xLxuQgFXS8du148",
   authDomain: "event-planner-40091.firebaseapp.com",
@@ -19,60 +22,60 @@ const firebaseConfig = {
   appId: "1:956379056954:android:02fa749b50d334d62c1e03",
 };
 
-// Initialize Firebase app
+console.log('Initializing Firebase...');
+
+// Inicialize o Firebase
 const app = initializeApp(firebaseConfig);
 
-// Auth configuration
-export const auth = getAuth(app);
+// Configure o Firestore com o tipo de cache apropriado para a plataforma
+let firestoreDb;
 
-// Firestore configuration - using getFirestore for better compatibility with Expo
-export const db = getFirestore(app);
-
-// Initialize persistence but handle errors gracefully
-export const initPersistence = async () => {
-  // Only try to enable persistence on platforms that support it well
-  if (Platform.OS === 'web') {
-    console.log("Skipping IndexedDB persistence on web platform");
-    return false;
-  }
+try {
+  // Verifica se estamos em um ambiente que suporta persistência
+  const canUsePersistence = Platform.OS === 'ios' || Platform.OS === 'android';
   
+  if (canUsePersistence) {
+    // Use persistência para plataformas móveis nativas
+    firestoreDb = initializeFirestore(app, {
+      localCache: persistentLocalCache({
+        cacheSizeBytes: CACHE_SIZE_UNLIMITED,
+      }),
+    });
+    console.log(`Firestore configured with persistent cache for ${Platform.OS}`);
+  } else {
+    // Use cache em memória para outras plataformas (web, testes, etc.)
+    firestoreDb = initializeFirestore(app, {
+      localCache: memoryLocalCache()
+    });
+    console.log('Firestore configured with memory cache');
+  }
+} catch (error) {
+  console.warn('Failed to configure Firestore cache, falling back to default:', error);
+  // Fallback para a configuração padrão
+  firestoreDb = getFirestore(app);
+}
+
+// Verifique se a persistência está habilitada
+const getPersistenceEnabled = async () => {
   try {
-    await enableIndexedDbPersistence(db);
-    console.log("Firestore offline persistence enabled");
-    return true;
-  } catch (error) {
-    const errorAny = error as any;
-    if (errorAny.code === 'failed-precondition') {
-      console.warn("Multiple tabs open, persistence can only be enabled in one tab");
-    } else if (errorAny.code === 'unimplemented') {
-      console.warn("IndexedDB is not available on this platform");
-    } else {
-      console.error("Error enabling persistence:", error);
-    }
+    return Platform.OS === 'ios' || Platform.OS === 'android';
+  } catch (e) {
     return false;
   }
 };
 
-// Firestore connection check function with auth error handling
-export const checkFirestoreConnection = async () => {
-  try {
-    const timestamp = Date.now().toString();
-    const docRef = doc(db, "_connection_test", timestamp);
-    
-    // Try to write to a test document
-    await setDoc(docRef, { timestamp });
-    
-    // If successful, clean up
-    await deleteDoc(docRef);
-    console.log("✅ Firestore connection successful");
-    return true;
-  } catch (error) {
-    const errorAny = error as any;
-    if (errorAny.code === 'permission-denied') {
-      console.error("❌ Firestore permission denied. Please check your security rules.");
-      return false;
-    }
-    console.error("❌ Firestore connection error:", error);
-    return false;
-  }
-};
+// Ao inicializar, verifique e log se a persistência está habilitada
+getPersistenceEnabled().then(enabled => {
+  console.log('Persistence enabled:', enabled);
+});
+
+// Authentication
+const auth = getAuth(app);
+
+// Storage
+const storage = getStorage(app);
+
+// Exporte as instâncias necessárias
+export const db = firestoreDb;
+export { auth, storage };
+export default app;

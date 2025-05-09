@@ -5,7 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Envelope, Trash, Check, Plus, WarningCircle } from 'phosphor-react-native';
 import { RootStackParamList } from '@/routes/stack.routes';
-import { removeEventGuest } from '@/firebase/firestoreUtils';
+import { removeGuest } from '@/firebase/firestoreUtils';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -39,7 +39,7 @@ const GuestList: React.FC<GuestListProps> = ({
   async function handleRemoveGuest(guestEmail: string) {
     try {
       // Remove guest from Firestore
-      await removeEventGuest(eventId, guestEmail);
+      await removeGuest(eventId, guestEmail);
 
       // Update local state
       setGuests(prevGuests => prevGuests.filter(guest => guest.email !== guestEmail));
@@ -62,16 +62,6 @@ const GuestList: React.FC<GuestListProps> = ({
           onPress={() => handleRemoveGuest(guest.email)}
         >
           <Trash size={20} color="#ff4d4d" weight="light" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.checkboxContainer, guest.confirmed && styles.checkboxActive]}
-          onPress={() => {
-            // Use o console.log para debugging
-            console.log(`Alterando status do convidado: ${guest.email} para ${!guest.confirmed}`);
-            onGuestStatusChange(eventId, guest.email, !guest.confirmed);
-          }}
-        >
-          {guest.confirmed && <Check size={16} color="#fff" weight="bold" />}
         </TouchableOpacity>
       </View>
     </View>

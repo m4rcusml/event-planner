@@ -1,257 +1,415 @@
-// firestoreUtils.ts - Updated with guest management functions
+// src/firebase/firestoreUtils.ts
 import { 
   collection, 
   doc, 
-  setDoc, 
-  getDoc, 
   getDocs, 
-  updateDoc,
   query, 
   where, 
-  Timestamp,
+  setDoc, 
+  getDoc, 
+  updateDoc, 
+  deleteDoc,
+  disableNetwork,
   enableNetwork,
-  disableNetwork
+  WriteBatch,
+  runTransaction,
+  writeBatch,
+  onSnapshot,
+  QueryConstraint,
+  DocumentData,
+  Query,
+  Timestamp
 } from 'firebase/firestore';
-import { db, auth } from './firebaseConfig';
+import { auth, db } from './firebaseConfig';
 import { Event } from '@/@types/events';
+import NetInfo from '@react-native-community/netinfo';
 
-// Toggle Firestore network state (with error handling)
-export const toggleFirestoreNetwork = async (enable: boolean) => {
-  try {
-    if (enable) {
+// Função para gerenciar a conexão com o Firestore
+export const handleFirestoreConnection = async () => {
+  const netInfo = await NetInfo.fetch();
+  
+  if (netInfo.isConnected) {
+    try {
       await enableNetwork(db);
       console.log('Firestore network enabled');
-    } else {
+    } catch (error) {
+      console.error('Error enabling Firestore network:', error);
+    }
+  } else {
+    try {
       await disableNetwork(db);
-      console.log('Firestore network disabled');
+      console.log('Firestore network disabled - running in offline mode');
+    } catch (error) {
+      console.error('Error disabling Firestore network:', error);
     }
-    return true;
-  } catch (error) {
-    console.error('Error toggling network:', error);
-    return false;
   }
 };
 
-// Save event with proper error handling for permissions
-export const saveEvent = async (eventData: Event): Promise<string | null> => {
+// Função para obter todos os eventos do usuário atual
+export const getUserEvents = async (): Promise<Event[]> => {
   try {
-    // Check if user is authenticated
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-      console.error("Cannot save event: User not authenticated");
-      throw new Error("Você precisa estar autenticado para salvar eventos");
-    }
-    
-    // Set user ID if not provided
-    if (!eventData.userId) {
-      eventData.userId = currentUser.uid;
-    }
-    
-    // Generate an ID if not provided
-    const eventId = eventData.id || `event_${new Date().getTime()}_${Math.floor(Math.random() * 1000)}`;
-    
-    // Ensure date is a Timestamp
-    if (!(eventData.date instanceof Timestamp)) {
-      console.warn('Date is not a Timestamp, converting...');
-      eventData.date = Timestamp.fromDate(new Date(eventData.date as any));
-    }
-    
-    // Add createdAt timestamp if not provided
-    if (!eventData.createdAt) {
-      eventData.createdAt = Timestamp.now();
-    }
-    
-    // Add updatedAt timestamp
-    eventData.updatedAt = Timestamp.now();
-    
-    // Remove the id field before saving
-    const { id, ...dataToSave } = eventData as any;
-    
-    // Save to Firestore with merge option
-    await setDoc(doc(db, 'events', eventId), dataToSave, { merge: true });
-    
-    console.log('Event saved successfully with ID:', eventId);
-    return eventId;
-  } catch (error: any) {
-    console.error('Error saving event:', error);
-    
-    // Handle specific Firestore errors
-    if (error.code === 'permission-denied') {
-      throw new Error('Permissão negada. Verifique se você está autenticado.');
-    }
-    
-    throw error;
-  }
-};
-
-// Get events for the current user with permission handling
-export const getUserEvents = async (userId?: string, futureOnly: boolean = true): Promise<Event[]> => {
-  try {
-    // Use current user's ID if not provided
-    const currentUser = auth.currentUser;
-    const userIdToUse = userId || (currentUser ? currentUser.uid : null);
-    
-    if (!userIdToUse) {
-      console.warn('No user ID available for fetching events');
+    // Verificar se existe um usuário autenticado
+    const user = auth.currentUser;
+    if (!user) {
+      console.error('No authenticated user found');
       return [];
     }
+
+    // Atualizar conexão com base no estado da rede
+    await handleFirestoreConnection();
+
+    // Consultar eventos do usuário
+    const eventsRef = collection(db, 'events');
+    const q = query(eventsRef, where('userId', '==', user.uid));
     
-    // Query events where userId matches
-    const q = query(collection(db, 'events'), where('userId', '==', userIdToUse));
     const querySnapshot = await getDocs(q);
     
     const events: Event[] = [];
-    const now = new Date();
-    
     querySnapshot.forEach((doc) => {
-      const event = { id: doc.id, ...doc.data() } as Event;
-      
-      if (futureOnly) {
-        // Include only future events if futureOnly is true
-        const eventDate = event.date instanceof Timestamp 
-          ? event.date.toDate()
-          : event.date instanceof Date 
-            ? event.date
-            : new Date(event.date as any);
-        
-        if (eventDate >= now) {
-          events.push(event);
-        }
-      } else {
-        // Include all events if futureOnly is false
-        events.push(event);
-      }
+      const eventData = doc.data() as Event;
+      events.push({
+        ...eventData,
+        id: doc.id // Adicionar o ID do documento aos dados do evento
+      });
     });
     
-    // Sort events by date (closest first)
-    events.sort((a, b) => {
-      const dateA = a.date instanceof Timestamp ? a.date.toDate() : new Date(a.date as any);
-      const dateB = b.date instanceof Timestamp ? b.date.toDate() : new Date(b.date as any);
-      return dateA.getTime() - dateB.getTime();
-    });
-    
+    console.log(`Fetched ${events.length} events for user ${user.uid}`);
     return events;
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error fetching user events:', error);
-    
-    if (error.code === 'permission-denied') {
-      console.warn('Permission denied when fetching events');
-    }
-    
-    // Return empty array instead of throwing
     return [];
   }
 };
 
-// Get a single event by ID
-export const getEventById = async (eventId: string): Promise<Event | null> => {
+/**
+ * Função para criar uma assinatura em tempo real para eventos
+ * 
+ * @param onSuccess - Callback chamado quando novos dados são recebidos
+ * @param onError - Callback chamado em caso de erro
+ * @param queryConstraints - Restrições de consulta opcionais
+ * @returns Função para cancelar a assinatura
+ */
+export const subscribeToUserEvents = (
+  onSuccess: (events: Event[]) => void,
+  onError: (error: Error) => void,
+  queryConstraints: QueryConstraint[] = []
+): (() => void) => {
   try {
-    const eventRef = doc(db, 'events', eventId);
-    const eventSnapshot = await getDoc(eventRef);
+    const user = auth.currentUser;
+    if (!user) {
+      onError(new Error('No authenticated user found'));
+      return () => {};
+    }
     
-    if (eventSnapshot.exists()) {
-      return { id: eventSnapshot.id, ...eventSnapshot.data() } as Event;
-    } else {
-      console.warn(`Event with ID ${eventId} not found`);
+    // Criar query base
+    const eventsRef = collection(db, 'events');
+    
+    // Adicionar restrição de usuário e quaisquer outras restrições fornecidas
+    const constraints = [where('userId', '==', user.uid), ...queryConstraints];
+    const q = query(eventsRef, ...constraints);
+    
+    // Configurar a assinatura
+    const unsubscribe = onSnapshot(q, 
+      (querySnapshot) => {
+        const events: Event[] = [];
+        querySnapshot.forEach((doc) => {
+          const eventData = doc.data() as Event;
+          events.push({
+            ...eventData,
+            id: doc.id
+          });
+        });
+        
+        console.log(`Subscription received ${events.length} events in real-time`);
+        onSuccess(events);
+      },
+      (error) => {
+        console.error('Error in events subscription:', error);
+        onError(error);
+      }
+    );
+    
+    return unsubscribe;
+  } catch (error) {
+    console.error('Error setting up subscription:', error);
+    onError(error as Error);
+    return () => {};
+  }
+};
+
+/**
+ * Função para criar uma assinatura em tempo real para eventos futuros
+ * 
+ * @param onSuccess - Callback chamado quando novos dados são recebidos
+ * @param onError - Callback chamado em caso de erro
+ * @returns Função para cancelar a assinatura
+ */
+export const subscribeToUpcomingEvents = (
+  onSuccess: (events: Event[]) => void,
+  onError: (error: Error) => void
+): (() => void) => {
+  // Primeiro executar handleFirestoreConnection para garantir conexão adequada
+  handleFirestoreConnection().catch(error => {
+    console.warn('Network connection status check failed:', error);
+  });
+
+  return subscribeToUserEvents(
+    (events) => {
+      // Filtrar eventos futuros com timestamp atual
+      const now = new Date();
+      console.log(`Processing ${events.length} events, filtering for future events`);
+
+      const upcomingEvents = events.filter(event => {
+        if (!event.date) {
+          console.warn('Event without date found:', event.id);
+          return false;
+        }
+
+        // Converter para Date, independente do formato
+        const eventDate = event.date instanceof Timestamp 
+          ? event.date.toDate() 
+          : new Date(event.date as any);
+        
+        return eventDate >= now;
+      });
+      
+      // Ordenar por data (mais próximos primeiro)
+      upcomingEvents.sort((a, b) => {
+        const dateA = a.date instanceof Timestamp ? a.date.toDate() : new Date(a.date as any);
+        const dateB = b.date instanceof Timestamp ? b.date.toDate() : new Date(b.date as any);
+        return dateA.getTime() - dateB.getTime();
+      });
+      
+      console.log(`Filtered to ${upcomingEvents.length} upcoming events`);
+      
+      // Limitar a 10 eventos para melhor desempenho na UI (opcional)
+      const limitedEvents = upcomingEvents.slice(0, 10);
+      onSuccess(limitedEvents);
+    },
+    onError
+  );
+};
+
+/**
+ * Função para criar uma assinatura em tempo real para eventos passados
+ * 
+ * @param onSuccess - Callback chamado quando novos dados são recebidos
+ * @param onError - Callback chamado em caso de erro
+ * @returns Função para cancelar a assinatura
+ */
+export const subscribeToPastEvents = (
+  onSuccess: (events: Event[]) => void,
+  onError: (error: Error) => void
+): (() => void) => {
+  return subscribeToUserEvents(
+    (events) => {
+      // Filtrar eventos passados
+      const now = new Date();
+      const pastEvents = events.filter(event => {
+        const eventDate = event.date instanceof Timestamp
+          ? event.date.toDate()
+          : new Date(event.date as any);
+        
+        return eventDate < now;
+      });
+      
+      // Ordenar por data (mais recentes primeiro)
+      pastEvents.sort((a, b) => {
+        const dateA = a.date instanceof Timestamp ? a.date.toDate() : new Date(a.date as any);
+        const dateB = b.date instanceof Timestamp ? b.date.toDate() : new Date(b.date as any);
+        return dateB.getTime() - dateA.getTime();
+      });
+      
+      onSuccess(pastEvents);
+    },
+    onError
+  );
+};
+
+// Função para adicionar um novo evento
+export const addEvent = async (eventData: Event): Promise<string | null> => {
+  try {
+    const user = auth.currentUser;
+    if (!user) {
+      console.error('No authenticated user found');
       return null;
     }
-  } catch (error: any) {
-    console.error('Error fetching event by ID:', error);
     
-    if (error.code === 'permission-denied') {
-      console.warn('Permission denied when fetching event');
+    // Garantir conexão para adicionar o evento
+    await handleFirestoreConnection();
+    
+    // Validar dados obrigatórios
+    if (!eventData.title || !eventData.date) {
+      console.error('Missing required event data: title or date');
+      return null;
     }
     
+    // Criar um novo documento com ID automático
+    const eventsRef = collection(db, 'events');
+    const newEventRef = doc(eventsRef);
+    
+    // Adicionar o ID do usuário e timestamp de criação aos dados do evento
+    const eventWithUserId = {
+      ...eventData,
+      userId: user.uid,
+      createdAt: new Date(),
+      // Garantir que date seja sempre um Timestamp para consistência
+      date: eventData.date instanceof Timestamp 
+        ? eventData.date 
+        : Timestamp.fromDate(new Date(eventData.date as any))
+    };
+    
+    await setDoc(newEventRef, eventWithUserId);
+    console.log('Event added with ID:', newEventRef.id);
+    
+    // Os listeners de tempo real já capturarão esta alteração
+    // e atualizarão as interfaces automaticamente
+    
+    return newEventRef.id;
+  } catch (error) {
+    console.error('Error adding event:', error);
     return null;
   }
 };
 
-// Update guests for an event
-export const updateEventGuests = async (
-  eventId: string, 
-  guests: { id: string; email: string; confirmed: boolean }[]
-): Promise<boolean> => {
+// Função para obter um evento específico
+export const getEvent = async (eventId: string): Promise<Event | null> => {
   try {
-    // Check if user is authenticated
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-      console.error("Cannot update guests: User not authenticated");
-      throw new Error("Você precisa estar autenticado para atualizar convidados");
-    }
-    
-    // Get the event first to verify ownership
-    const event = await getEventById(eventId);
-    if (!event) {
-      throw new Error("Evento não encontrado");
-    }
-    
-    // Verify that the current user owns this event
-    if (event.userId !== currentUser.uid) {
-      console.error("User doesn't own this event");
-      throw new Error("Você não tem permissão para modificar este evento");
-    }
-    
-    // Update the event with new guests list
     const eventRef = doc(db, 'events', eventId);
-    await updateDoc(eventRef, {
-      guests: guests,
-      updatedAt: Timestamp.now()
-    });
+    const eventDoc = await getDoc(eventRef);
     
-    console.log('Event guests updated successfully');
-    return true;
-  } catch (error: any) {
-    console.error('Error updating event guests:', error);
-    
-    if (error.code === 'permission-denied') {
-      throw new Error('Permissão negada. Verifique se você está autenticado.');
+    if (eventDoc.exists()) {
+      return { ...eventDoc.data() as Event, id: eventDoc.id };
+    } else {
+      console.log('No event found with ID:', eventId);
+      return null;
     }
-    
-    throw error;
+  } catch (error) {
+    console.error('Error getting event:', error);
+    return null;
   }
 };
 
-// Remove a guest from an event
-export const removeEventGuest = async (eventId: string, guestId: string): Promise<boolean> => {
+// Função para atualizar um evento
+export const updateEvent = async (eventId: string, eventData: Partial<Event>): Promise<boolean> => {
   try {
-    // Check if user is authenticated
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-      console.error("Cannot remove guest: User not authenticated");
-      throw new Error("Você precisa estar autenticado para remover convidados");
-    }
-    
-    // Get the current event
-    const event = await getEventById(eventId);
-    if (!event) {
-      throw new Error("Evento não encontrado");
-    }
-    
-    // Verify that the current user owns this event
-    if (event.userId !== currentUser.uid) {
-      console.error("User doesn't own this event");
-      throw new Error("Você não tem permissão para modificar este evento");
-    }
-    
-    // Filter out the guest with the specified ID
-    const updatedGuests = (event.guests || []).filter(guest => guest.id !== guestId);
-    
-    // Update the event with the filtered guests list
     const eventRef = doc(db, 'events', eventId);
-    await updateDoc(eventRef, {
-      guests: updatedGuests,
-      updatedAt: Timestamp.now()
-    });
     
-    console.log('Guest removed successfully');
-    return true;
-  } catch (error: any) {
-    console.error('Error removing event guest:', error);
-    
-    if (error.code === 'permission-denied') {
-      throw new Error('Permissão negada. Verifique se você está autenticado.');
+    // Verificar se o evento existe
+    const eventDoc = await getDoc(eventRef);
+    if (!eventDoc.exists()) {
+      console.log('Event not found:', eventId);
+      return false;
     }
     
-    throw error;
+    // Atualizar apenas os campos fornecidos
+    await updateDoc(eventRef, eventData);
+    console.log('Event updated:', eventId);
+    
+    return true;
+  } catch (error) {
+    console.error('Error updating event:', error);
+    return false;
+  }
+};
+
+// Função para excluir um evento
+export const deleteEvent = async (eventId: string): Promise<boolean> => {
+  try {
+    const eventRef = doc(db, 'events', eventId);
+    
+    // Verificar se o evento existe
+    const eventDoc = await getDoc(eventRef);
+    if (!eventDoc.exists()) {
+      console.log('Event not found:', eventId);
+      return false;
+    }
+    
+    // Excluir o evento
+    await deleteDoc(eventRef);
+    console.log('Event deleted:', eventId);
+    
+    return true;
+  } catch (error) {
+    console.error('Error deleting event:', error);
+    return false;
+  }
+};
+
+// Função para atualizar o status de um convidado
+export const updateGuestStatus = async (
+  eventId: string, 
+  guestEmail: string, 
+  confirmed: boolean
+): Promise<boolean> => {
+  try {
+    const eventRef = doc(db, 'events', eventId);
+    
+    // Executar uma transação para garantir consistência
+    return await runTransaction(db, async (transaction) => {
+      const eventDoc = await transaction.get(eventRef);
+      
+      if (!eventDoc.exists()) {
+        console.log('Event not found:', eventId);
+        return false;
+      }
+      
+      const event = eventDoc.data() as Event;
+      const guests = event.guests || [];
+      
+      // Atualizar o status do convidado
+      const updatedGuests = guests.map(guest => {
+        if (guest.email === guestEmail) {
+          return { ...guest, confirmed };
+        }
+        return guest;
+      });
+      
+      // Se o convidado não existir na lista
+      if (!guests.some(guest => guest.email === guestEmail)) {
+        updatedGuests.push({ id: crypto.randomUUID(), email: guestEmail, confirmed });
+      }
+      
+      // Atualizar o evento com a lista de convidados atualizada
+      transaction.update(eventRef, { guests: updatedGuests });
+      console.log(`Guest ${guestEmail} status updated to ${confirmed}`);
+      
+      return true;
+    });
+  } catch (error) {
+    console.error('Error updating guest status:', error);
+    return false;
+  }
+};
+
+// Função para remover um convidado
+export const removeGuest = async (eventId: string, guestEmail: string): Promise<boolean> => {
+  try {
+    const eventRef = doc(db, 'events', eventId);
+    
+    // Executar uma transação para garantir consistência
+    return await runTransaction(db, async (transaction) => {
+      const eventDoc = await transaction.get(eventRef);
+      
+      if (!eventDoc.exists()) {
+        console.log('Event not found:', eventId);
+        return false;
+      }
+      
+      const event = eventDoc.data() as Event;
+      const guests = event.guests || [];
+      
+      // Remover o convidado da lista
+      const updatedGuests = guests.filter(guest => guest.email !== guestEmail);
+      
+      // Atualizar o evento com a lista de convidados atualizada
+      transaction.update(eventRef, { guests: updatedGuests });
+      console.log(`Guest ${guestEmail} removed from event ${eventId}`);
+      
+      return true;
+    });
+  } catch (error) {
+    console.error('Error removing guest:', error);
+    return false;
   }
 };

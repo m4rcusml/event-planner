@@ -1,5 +1,5 @@
 import NetInfo from '@react-native-community/netinfo';
-import { toggleFirestoreNetwork } from '@/firebase/firestoreUtils';
+import { handleFirestoreConnection } from '@/firebase/firestoreUtils';
 
 let isNetworkConnected = true;
 
@@ -30,7 +30,7 @@ export const setupNetworkMonitoring = () => {
 // Atualiza o estado da rede do Firestore conforme a conectividade
 const updateFirestoreNetworkState = async (isConnected: boolean) => {
   try {
-    await toggleFirestoreNetwork(isConnected);
+    await handleFirestoreConnection();
   } catch (error) {
     console.error('Error updating Firestore network state:', error);
   }

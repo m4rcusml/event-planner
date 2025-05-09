@@ -227,4 +227,16 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  offlineIndicator: {
+    backgroundColor: '#FFE9D9',
+    borderRadius: 8,
+    padding: 10,
+    marginVertical: 10,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6B35',
+  },
+  offlineText: {
+    color: '#7D4427',
+    fontSize: 12,
+  }
 });
