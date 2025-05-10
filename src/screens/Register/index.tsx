@@ -10,8 +10,12 @@ import { CalendarBlank, Envelope, User } from 'phosphor-react-native'
 import { createUserWithEmailAndPassword, getAuth } from 'firebase/auth'
 import BgImg from '@/assets/bg.png'
 import Checked from '@/assets/checked.png'
+import { useAuth } from '@/contexts/auth'
+import { doc, setDoc } from 'firebase/firestore'
+import { db } from '@/firebase/firebaseConfig'
 
 export function Register() {
+  const { handleAddUserToLocalStorage } = useAuth();
   const { navigate, goBack } = useNavigation<NavigationProp<RootStackParamList>>();
   const [isRegistered, setIsRegistered] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -40,6 +44,17 @@ export function Register() {
       const auth = getAuth();
       await createUserWithEmailAndPassword(auth, email, password);
       // Here you can also add the user's additional info to Firestore if needed
+
+      const userDoc = {
+        fullName,
+        email,
+        birthDate,
+        createdAt: new Date(),
+      };
+      
+      handleAddUserToLocalStorage(auth.currentUser!, userDoc);
+
+      await setDoc(doc(db, "users", auth.currentUser!.uid), userDoc);
 
       setIsRegistered(true);
     } catch (error: any) {

@@ -179,14 +179,20 @@ export function Guests() {
 
   // Carrega eventos quando o componente é montado
   useEffect(() => {
-    fetchEvents();
+    const unsubscribe = fetchEvents();
+
+    return unsubscribe()
   }, []);
 
   // Sincroniza quando o status da conexão muda de offline para online
   useEffect(() => {
+    let unsubscribe = () => {};
+    
     if (isConnected) {
-      fetchEvents();
+      unsubscribe = fetchEvents();
     }
+    
+    return () => unsubscribe();
   }, [isConnected]);
 
   return (

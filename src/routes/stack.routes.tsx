@@ -11,6 +11,9 @@ import { Guests } from '@/screens/Guests'
 import { AddEvent } from '@/screens/AddEvent'
 import { EventSuccess } from '@/screens/EventSuccess'
 import { AddGuests } from '@/screens/AddGuest'
+import { useAuth } from '@/contexts/auth'
+import { View } from 'react-native'
+import { ActivityIndicator } from 'react-native'
 
 export type RootStackParamList = {
   Login: undefined
@@ -29,6 +32,14 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>()
 
 export function StackRoutes() {
+  const { loading, user } = useAuth();
+
+  if (loading) {
+    return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <ActivityIndicator color="#FF914D" size="large" />
+    </View>;
+  }
+
   return (
     <Stack.Navigator screenOptions={{
       header: () => <Header welcomeUser={false} useDrawer={false} />,
@@ -38,17 +49,24 @@ export function StackRoutes() {
       headerTintColor: '#fff',
       statusBarBackgroundColor: '#D54E21',
     }}>
-      <Stack.Screen name="Login" component={Login} options={{ headerShown: false }} />
-      <Stack.Screen name="Register" component={Register} options={{ title: 'Voltar' }} />
-      <Stack.Screen name="ForgotPassword" component={ForgotPassword} options={{ title: 'Voltar' }} />
-      <Stack.Screen name="logged" component={DrawerRoutes} options={{ headerShown: false }} />
-      <Stack.Screen name="profile" component={Profile} options={{ title: 'Voltar' }} />
-      <Stack.Screen name="events" component={Events} options={{ title: 'Voltar' }} />
-      <Stack.Screen name="oldEvents" component={OldEvents} options={{ title: 'Voltar' }} />
-      <Stack.Screen name="guests" component={Guests} options={{ title: 'Voltar' }} />
-      <Stack.Screen name="addEvent" component={AddEvent} options={{ title: 'Voltar' }} />
-      <Stack.Screen name="eventSuccess" component={EventSuccess} options={{ headerShown: false }} />
-      <Stack.Screen name="addGuest" component={AddGuests} options={{ title: 'Voltar' }} />
+      {!user ? (
+        <>
+          <Stack.Screen name="Login" component={Login} options={{ headerShown: false }} />
+          <Stack.Screen name="Register" component={Register} options={{ title: 'Voltar' }} />
+          <Stack.Screen name="ForgotPassword" component={ForgotPassword} options={{ title: 'Voltar' }} />
+        </>
+      ) : (
+        <>
+          <Stack.Screen name="logged" component={DrawerRoutes} options={{ headerShown: false }} />
+          <Stack.Screen name="profile" component={Profile} options={{ title: 'Voltar' }} />
+          <Stack.Screen name="events" component={Events} options={{ title: 'Voltar' }} />
+          <Stack.Screen name="oldEvents" component={OldEvents} options={{ title: 'Voltar' }} />
+          <Stack.Screen name="guests" component={Guests} options={{ title: 'Voltar' }} />
+          <Stack.Screen name="addEvent" component={AddEvent} options={{ title: 'Voltar' }} />
+          <Stack.Screen name="eventSuccess" component={EventSuccess} options={{ headerShown: false }} />
+          <Stack.Screen name="addGuest" component={AddGuests} options={{ title: 'Voltar' }} />
+        </>
+      )}
     </Stack.Navigator>
   )
 }

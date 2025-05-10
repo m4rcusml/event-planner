@@ -7,6 +7,7 @@ import { auth } from '@/firebase/firebaseConfig';
 import { setupNetworkMonitoring } from '@/utils/networkCheck';
 import { onAuthStateChanged } from 'firebase/auth';
 import { LogBox } from 'react-native';
+import { AuthProvider } from '@/contexts/auth';
 
 // Ignora avisos específicos do Firebase
 LogBox.ignoreLogs([
@@ -30,10 +31,10 @@ export default function App() {
     const initFirebase = async () => {
       try {
         console.log("Initializing Firebase...");
-        
+
         // 1. Set up network monitoring first
         const unsubscribeNetInfo = setupNetworkMonitoring();
-        
+
         // Even with errors, we'll let the app start
         setIsFirebaseReady(true);
 
@@ -45,7 +46,7 @@ export default function App() {
         const errorAny = error as any;
         console.error("Firebase initialization error:", error);
         setInitError(errorAny.message || "Erro ao inicializar o Firebase");
-        
+
         // Still set ready to true so the app can start
         setIsFirebaseReady(true);
       }
@@ -75,10 +76,12 @@ export default function App() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
-      <Routes />
-      <StatusBar style="auto" backgroundColor='#FF7F50' />
-    </View>
+    <AuthProvider>
+      <View style={{ flex: 1 }}>
+        <Routes />
+        <StatusBar style="auto" backgroundColor='#FF7F50' />
+      </View>
+    </AuthProvider>
   );
 }
 

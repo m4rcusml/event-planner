@@ -5,7 +5,6 @@ import {
   getFirestore, 
   initializeFirestore,
   persistentLocalCache,
-  persistentMultipleTabManager,
   memoryLocalCache,
   CACHE_SIZE_UNLIMITED 
 } from 'firebase/firestore';

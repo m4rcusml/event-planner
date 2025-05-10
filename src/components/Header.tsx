@@ -6,8 +6,10 @@ import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { ArrowLeft, UserCircle } from 'phosphor-react-native';
 import { MyText } from './MyText';
+import { useAuth } from '@/contexts/auth';
 
 export function Header({ welcomeUser = true, useDrawer = true }: { welcomeUser?: boolean, useDrawer?: boolean }) {
+  const { userData } = useAuth();
   const { top } = useSafeAreaInsets();
   const navigation = useNavigation<DrawerNavigationProp<any>>();
 
@@ -22,7 +24,7 @@ export function Header({ welcomeUser = true, useDrawer = true }: { welcomeUser?:
             <UserCircle size={42} color="#FFF" weight='fill' />
             <View style={{ gap: 2 }}>
               <MyText color='white' variant="subtitle1">BEM VINDO</MyText>
-              <MyText color='white' variant="h5">USUÁRIO!</MyText>
+              <MyText color='white' variant="h5">{userData?.fullName.split(' ')[0] || 'Usuário'}!</MyText>
             </View>
           </> : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <ArrowLeft size={24} color="#FFF" weight="bold" />

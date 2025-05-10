@@ -57,17 +57,24 @@ export const AddEvent: React.FC = () => {
       return false;
     }
 
-    // Validação do formato da data (DD/MM/AA)
-    const dateRegex = /^\d{2}\/\d{2}\/\d{2}$/;
+    // Validação do formato da data (DD/MM/YY ou DD/MM/YYYY)
+    const dateRegex = /^(\d{2}\/\d{2}\/(\d{2}|\d{4}))$/;
     if (!dateRegex.test(date)) {
-      Alert.alert('Erro', 'Formato de data inválido. Use DD/MM/AA');
+      Alert.alert('Erro', 'Formato de data inválido. Use DD/MM/YY ou DD/MM/YYYY');
+      return false;
+    }
+
+    // Validando valores da data
+    const [day, month, year] = date.split('/').map(Number);
+    if (day < 1 || day > 31 || month < 1 || month > 12) {
+      Alert.alert('Erro', 'Data inválida. Verifique dia e mês');
       return false;
     }
 
     // Validação do formato da hora (HH:MM)
-    const timeRegex = /^\d{2}:\d{2}$/;
+    const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
     if (!timeRegex.test(time)) {
-      Alert.alert('Erro', 'Formato de hora inválido. Use HH:MM');
+      Alert.alert('Erro', 'Formato de hora inválido. Use HH:MM (00:00 até 23:59)');
       return false;
     }
 
@@ -102,10 +109,29 @@ export const AddEvent: React.FC = () => {
       const userId = currentUser ? currentUser.uid : 'anonymous';
 
       // Criando o objeto de evento conforme a tipagem
+      // Normalize date format
+      const normalizedDate = date.replace(/[^\d]/g, ''); // Remove non-digits
+      let formattedDate = '';
+      
+      if (normalizedDate.length === 6 || normalizedDate.length === 8) { // DDMMYY or DD/MM/YYYY
+        formattedDate = `${normalizedDate.slice(0,2)}/${normalizedDate.slice(2,4)}/${normalizedDate.slice(4)}`;
+      } else if (normalizedDate.length === 8 || normalizedDate.length === 10) { // DDMMYYYY or DD/MM/AAAA
+        formattedDate = `${normalizedDate.slice(0,2)}/${normalizedDate.slice(2,4)}/${normalizedDate.slice(6)}`;
+      } else {
+        throw new Error('Data inválida. Use o formato DD/MM/AA ou DD/MM/AAAA');
+      }
+
+      // Normalize time format
+      const normalizedTime = time.replace(/[^\d]/g, ''); // Remove non-digits
+      if (normalizedTime.length !== 4) {
+        throw new Error('Hora inválida. Use o formato HH:MM');
+      }
+      const formattedTime = `${normalizedTime.slice(0,2)}:${normalizedTime.slice(2)}`;
+
       const eventData: Event = {
         title,
         description,
-        date: createTimestamp(date, time),
+        date: createTimestamp(formattedDate, formattedTime),
         local: location,
         guests: guests.split(',').map(email => email.trim()).filter(email => email !== '').map((email, i) => ({ id: (email + i), email, confirmed: true })),
         createdAt: Timestamp.now(),
