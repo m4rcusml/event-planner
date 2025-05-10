@@ -48,44 +48,6 @@ export function Login() {
       })
   }
 
-  function loginWithGoogle() {
-    signIn()
-      .then(() => {
-        navigate('logged')
-      })
-      .catch((error) => {
-        console.log(error)
-        if (error.code === 'auth/popup-closed-by-user') {
-          alert('Login cancelado')
-        } else if (error.code === 'auth/popup-blocked') {
-          alert('Pop-up bloqueado pelo navegador')
-        } else {
-          alert('Erro ao fazer login com Google. Tente novamente mais tarde.')
-        }
-      })
-  }
-
-  function loginWithFacebook() {
-    loginWithX()
-    return
-    const provider = new FacebookAuthProvider()
-    signInWithPopup(auth, provider)
-      .then(() => {
-        navigate('logged')
-      })
-      .catch(() => {
-        alert('Erro ao logar com Facebook')
-      })
-  }
-
-  function loginWithX() {
-    navigate('logged')
-  }
-
-  function loginWithLinkedin() {
-    navigate('logged')
-  }
-
   return (
     <ImageBackground source={BgImg} style={styles.container}>
       <View style={styles.bgHeader}>
@@ -115,25 +77,6 @@ export function Login() {
         <MyText style={styles.forgot} onPress={forgotPassword}>Esqueci minha senha</MyText>
 
         <Button onPress={login}>Entrar</Button>
-
-        <MyText style={styles.or}>
-          Ou acesse com
-        </MyText>
-
-        <View style={styles.socialLogin}>
-          <Button backgroundColor='white' squared onPress={loginWithGoogle}>
-            <GoogleLogo weight='fill' color='red' />
-          </Button>
-          <Button backgroundColor='white' squared onPress={loginWithFacebook}>
-            <FacebookLogo weight='fill' color='blue' />
-          </Button>
-          <Button backgroundColor='white' squared onPress={loginWithX}>
-            <XLogo />
-          </Button>
-          <Button backgroundColor='white' squared onPress={loginWithLinkedin}>
-            <LinkedinLogo weight='fill' color='blue' />
-          </Button>
-        </View>
 
         <MyText style={styles.register}>
           Não tem conta? <MyText onPress={register} variant='button'>Cadastre-se</MyText>
