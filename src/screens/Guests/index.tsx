@@ -13,7 +13,8 @@ import { Timestamp } from 'firebase/firestore';
 import { 
   getUserEvents, 
   updateGuestStatus, 
-  removeGuest 
+  removeGuest, 
+  subscribeToUserEvents
 } from '@/firebase/firestoreUtils';
 import { Event } from '@/@types/events';
 import NetInfo from '@react-native-community/netinfo';
@@ -129,36 +130,50 @@ export function Guests() {
   };
 
   // Função para buscar eventos do Firestore
-  const fetchEvents = async () => {
+  const fetchEvents = () => {
     try {
       setLoading(true);
-      const allEvents = await getUserEvents();
 
-      // Filtra eventos para incluir apenas aqueles após a data atual
-      const now = new Date();
-      const upcomingEvents = allEvents.filter(event => {
-        // Converte Timestamp do Firestore para JavaScript Date se necessário
-        const eventDate = event.date instanceof Timestamp
-          ? event.date.toDate()
-          : new Date(event.date as any);
+      // Configurar a assinatura em tempo real
+      const unsubscribe = subscribeToUserEvents(
+        (allEvents) => {
+          // Filtra eventos para incluir apenas aqueles após a data atual
+          const now = new Date();
+          const upcomingEvents = allEvents.filter(event => {
+            // Converte Timestamp do Firestore para JavaScript Date se necessário
+            const eventDate = event.date instanceof Timestamp
+              ? event.date.toDate()
+              : new Date(event.date as any);
 
-        return eventDate >= now;
-      });
+            return eventDate >= now;
+          });
 
-      // Ordena eventos por data (mais próximos primeiro)
-      upcomingEvents.sort((a, b) => {
-        const dateA = a.date instanceof Timestamp ? a.date.toDate() : new Date(a.date as any);
-        const dateB = b.date instanceof Timestamp ? b.date.toDate() : new Date(b.date as any);
-        return dateA.getTime() - dateB.getTime();
-      });
+          // Ordena eventos por data (mais próximos primeiro)
+          upcomingEvents.sort((a, b) => {
+            const dateA = a.date instanceof Timestamp ? a.date.toDate() : new Date(a.date as any);
+            const dateB = b.date instanceof Timestamp ? b.date.toDate() : new Date(b.date as any);
+            return dateA.getTime() - dateB.getTime();
+          });
 
-      setEvents(upcomingEvents);
+          setEvents(upcomingEvents);
+          setLoading(false);
+          setRefreshing(false);
+        },
+        (error) => {
+          console.error('Error fetching events:', error);
+          Alert.alert('Erro', 'Não foi possível carregar os eventos. Tente novamente.');
+          setLoading(false);
+          setRefreshing(false);
+        }
+      );
+
+      // Retorna a função de limpeza para useEffect
+      return unsubscribe;
     } catch (error) {
-      console.error('Error fetching events:', error);
-      Alert.alert('Erro', 'Não foi possível carregar os eventos. Tente novamente.');
-    } finally {
+      console.error('Error setting up events subscription:', error);
       setLoading(false);
       setRefreshing(false);
+      return () => {};
     }
   };
 

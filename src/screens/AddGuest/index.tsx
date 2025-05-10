@@ -14,9 +14,11 @@ import { EnvelopeSimple, Plus, User, Trash, Calendar, MapPin } from 'phosphor-re
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/routes/stack.routes';
-import { getEventById, updateEventGuests, removeEventGuest } from '@/firebase/firestoreUtils';
-import { Timestamp } from 'firebase/firestore';
+import { getEvent, updateGuestStatus, removeGuest } from '@/firebase/firestoreUtils';
+import { doc, getDoc, Timestamp } from 'firebase/firestore';
 import { Event } from '@/@types/events';
+import { sendEmail } from '@/services/emailSender';
+import { db } from '@/firebase/firebaseConfig';
 
 // Define the Guest interface to match the Event interface's guests property
 interface Guest {
@@ -65,7 +67,7 @@ export function AddGuests({ route, navigation }: AddGuestsProps) {
     setIsLoading(true);
     try {
       // Get event data from Firestore
-      const eventData = await getEventById(eventId);
+      const eventData = await getEvent(eventId);
       
       if (eventData) {
         // Check if the event is in the future
@@ -126,7 +128,7 @@ export function AddGuests({ route, navigation }: AddGuestsProps) {
       };
 
       // Add guest to Firestore
-      await updateEventGuests(eventId, [...guests, newGuest]);
+      await updateGuestStatus(eventId, newGuest.email, newGuest.confirmed);
       
       // Update local state
       setGuests(prevGuests => [...prevGuests, newGuest]);
@@ -145,7 +147,7 @@ export function AddGuests({ route, navigation }: AddGuestsProps) {
 
     try {
       // Remove guest from Firestore
-      await removeEventGuest(eventId, guestId);
+      await removeGuest(eventId, guestId);
       
       // Update local state
       setGuests(prevGuests => prevGuests.filter(guest => guest.id !== guestId));
@@ -167,8 +169,21 @@ export function AddGuests({ route, navigation }: AddGuestsProps) {
     setIsSending(true);
 
     try {
-      // In a real app, you would implement email sending logic here
-      // For now, we'll just mark the changes as successful
+      if(!event) {
+        throw new Error('Event not found');
+      }
+      
+      const emailPromises = guests.map(async guest => {
+        const userDoc = await getDoc(doc(db, 'users', event?.userId || ''));
+        const userName = userDoc.exists() ? userDoc.data().name : '[Desconhecido]';
+        
+        return sendEmail(guest.email, guest.email, event);
+      });
+      const response = await Promise.all(emailPromises);
+      
+      if(!response) {
+        throw new Error('Error sending invitations');
+      }
       
       Alert.alert(
         'Sucesso',

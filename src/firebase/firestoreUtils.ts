@@ -1,13 +1,13 @@
 // src/firebase/firestoreUtils.ts
-import { 
-  collection, 
-  doc, 
-  getDocs, 
-  query, 
-  where, 
-  setDoc, 
-  getDoc, 
-  updateDoc, 
+import {
+  collection,
+  doc,
+  getDocs,
+  query,
+  where,
+  setDoc,
+  getDoc,
+  updateDoc,
   deleteDoc,
   disableNetwork,
   enableNetwork,
@@ -23,11 +23,12 @@ import {
 import { auth, db } from './firebaseConfig';
 import { Event } from '@/@types/events';
 import NetInfo from '@react-native-community/netinfo';
+import { v4 as uuidv4 } from 'uuid';
 
 // Função para gerenciar a conexão com o Firestore
 export const handleFirestoreConnection = async () => {
   const netInfo = await NetInfo.fetch();
-  
+
   if (netInfo.isConnected) {
     try {
       await enableNetwork(db);
@@ -61,9 +62,9 @@ export const getUserEvents = async (): Promise<Event[]> => {
     // Consultar eventos do usuário
     const eventsRef = collection(db, 'events');
     const q = query(eventsRef, where('userId', '==', user.uid));
-    
+
     const querySnapshot = await getDocs(q);
-    
+
     const events: Event[] = [];
     querySnapshot.forEach((doc) => {
       const eventData = doc.data() as Event;
@@ -72,7 +73,7 @@ export const getUserEvents = async (): Promise<Event[]> => {
         id: doc.id // Adicionar o ID do documento aos dados do evento
       });
     });
-    
+
     console.log(`Fetched ${events.length} events for user ${user.uid}`);
     return events;
   } catch (error) {
@@ -98,18 +99,18 @@ export const subscribeToUserEvents = (
     const user = auth.currentUser;
     if (!user) {
       onError(new Error('No authenticated user found'));
-      return () => {};
+      return () => { };
     }
-    
+
     // Criar query base
     const eventsRef = collection(db, 'events');
-    
+
     // Adicionar restrição de usuário e quaisquer outras restrições fornecidas
     const constraints = [where('userId', '==', user.uid), ...queryConstraints];
     const q = query(eventsRef, ...constraints);
-    
+
     // Configurar a assinatura
-    const unsubscribe = onSnapshot(q, 
+    const unsubscribe = onSnapshot(q,
       (querySnapshot) => {
         const events: Event[] = [];
         querySnapshot.forEach((doc) => {
@@ -119,7 +120,7 @@ export const subscribeToUserEvents = (
             id: doc.id
           });
         });
-        
+
         console.log(`Subscription received ${events.length} events in real-time`);
         onSuccess(events);
       },
@@ -128,12 +129,12 @@ export const subscribeToUserEvents = (
         onError(error);
       }
     );
-    
+
     return unsubscribe;
   } catch (error) {
     console.error('Error setting up subscription:', error);
     onError(error as Error);
-    return () => {};
+    return () => { };
   }
 };
 
@@ -166,22 +167,22 @@ export const subscribeToUpcomingEvents = (
         }
 
         // Converter para Date, independente do formato
-        const eventDate = event.date instanceof Timestamp 
-          ? event.date.toDate() 
+        const eventDate = event.date instanceof Timestamp
+          ? event.date.toDate()
           : new Date(event.date as any);
-        
+
         return eventDate >= now;
       });
-      
+
       // Ordenar por data (mais próximos primeiro)
       upcomingEvents.sort((a, b) => {
         const dateA = a.date instanceof Timestamp ? a.date.toDate() : new Date(a.date as any);
         const dateB = b.date instanceof Timestamp ? b.date.toDate() : new Date(b.date as any);
         return dateA.getTime() - dateB.getTime();
       });
-      
+
       console.log(`Filtered to ${upcomingEvents.length} upcoming events`);
-      
+
       // Limitar a 10 eventos para melhor desempenho na UI (opcional)
       const limitedEvents = upcomingEvents.slice(0, 10);
       onSuccess(limitedEvents);
@@ -209,17 +210,17 @@ export const subscribeToPastEvents = (
         const eventDate = event.date instanceof Timestamp
           ? event.date.toDate()
           : new Date(event.date as any);
-        
+
         return eventDate < now;
       });
-      
+
       // Ordenar por data (mais recentes primeiro)
       pastEvents.sort((a, b) => {
         const dateA = a.date instanceof Timestamp ? a.date.toDate() : new Date(a.date as any);
         const dateB = b.date instanceof Timestamp ? b.date.toDate() : new Date(b.date as any);
         return dateB.getTime() - dateA.getTime();
       });
-      
+
       onSuccess(pastEvents);
     },
     onError
@@ -234,37 +235,37 @@ export const addEvent = async (eventData: Event): Promise<string | null> => {
       console.error('No authenticated user found');
       return null;
     }
-    
+
     // Garantir conexão para adicionar o evento
     await handleFirestoreConnection();
-    
+
     // Validar dados obrigatórios
     if (!eventData.title || !eventData.date) {
       console.error('Missing required event data: title or date');
       return null;
     }
-    
+
     // Criar um novo documento com ID automático
     const eventsRef = collection(db, 'events');
     const newEventRef = doc(eventsRef);
-    
+
     // Adicionar o ID do usuário e timestamp de criação aos dados do evento
     const eventWithUserId = {
       ...eventData,
       userId: user.uid,
       createdAt: new Date(),
       // Garantir que date seja sempre um Timestamp para consistência
-      date: eventData.date instanceof Timestamp 
-        ? eventData.date 
+      date: eventData.date instanceof Timestamp
+        ? eventData.date
         : Timestamp.fromDate(new Date(eventData.date as any))
     };
-    
+
     await setDoc(newEventRef, eventWithUserId);
     console.log('Event added with ID:', newEventRef.id);
-    
+
     // Os listeners de tempo real já capturarão esta alteração
     // e atualizarão as interfaces automaticamente
-    
+
     return newEventRef.id;
   } catch (error) {
     console.error('Error adding event:', error);
@@ -277,7 +278,7 @@ export const getEvent = async (eventId: string): Promise<Event | null> => {
   try {
     const eventRef = doc(db, 'events', eventId);
     const eventDoc = await getDoc(eventRef);
-    
+
     if (eventDoc.exists()) {
       return { ...eventDoc.data() as Event, id: eventDoc.id };
     } else {
@@ -294,18 +295,18 @@ export const getEvent = async (eventId: string): Promise<Event | null> => {
 export const updateEvent = async (eventId: string, eventData: Partial<Event>): Promise<boolean> => {
   try {
     const eventRef = doc(db, 'events', eventId);
-    
+
     // Verificar se o evento existe
     const eventDoc = await getDoc(eventRef);
     if (!eventDoc.exists()) {
       console.log('Event not found:', eventId);
       return false;
     }
-    
+
     // Atualizar apenas os campos fornecidos
     await updateDoc(eventRef, eventData);
     console.log('Event updated:', eventId);
-    
+
     return true;
   } catch (error) {
     console.error('Error updating event:', error);
@@ -317,18 +318,18 @@ export const updateEvent = async (eventId: string, eventData: Partial<Event>): P
 export const deleteEvent = async (eventId: string): Promise<boolean> => {
   try {
     const eventRef = doc(db, 'events', eventId);
-    
+
     // Verificar se o evento existe
     const eventDoc = await getDoc(eventRef);
     if (!eventDoc.exists()) {
       console.log('Event not found:', eventId);
       return false;
     }
-    
+
     // Excluir o evento
     await deleteDoc(eventRef);
     console.log('Event deleted:', eventId);
-    
+
     return true;
   } catch (error) {
     console.error('Error deleting event:', error);
@@ -338,25 +339,25 @@ export const deleteEvent = async (eventId: string): Promise<boolean> => {
 
 // Função para atualizar o status de um convidado
 export const updateGuestStatus = async (
-  eventId: string, 
-  guestEmail: string, 
+  eventId: string,
+  guestEmail: string,
   confirmed: boolean
 ): Promise<boolean> => {
   try {
     const eventRef = doc(db, 'events', eventId);
-    
+
     // Executar uma transação para garantir consistência
     return await runTransaction(db, async (transaction) => {
       const eventDoc = await transaction.get(eventRef);
-      
+
       if (!eventDoc.exists()) {
         console.log('Event not found:', eventId);
         return false;
       }
-      
+
       const event = eventDoc.data() as Event;
       const guests = event.guests || [];
-      
+
       // Atualizar o status do convidado
       const updatedGuests = guests.map(guest => {
         if (guest.email === guestEmail) {
@@ -364,16 +365,22 @@ export const updateGuestStatus = async (
         }
         return guest;
       });
-      
+
       // Se o convidado não existir na lista
-      if (!guests.some(guest => guest.email === guestEmail)) {
-        updatedGuests.push({ id: crypto.randomUUID(), email: guestEmail, confirmed });
+      const guestExists = updatedGuests.some(guest => guest.email === guestEmail);
+      if (!guestExists) {
+        const timestamp = Date.now();
+        updatedGuests.push({ 
+          id: `guest_${guestEmail}_${timestamp}`, 
+          email: guestEmail, 
+          confirmed 
+        });
       }
-      
+
       // Atualizar o evento com a lista de convidados atualizada
       transaction.update(eventRef, { guests: updatedGuests });
       console.log(`Guest ${guestEmail} status updated to ${confirmed}`);
-      
+
       return true;
     });
   } catch (error) {
@@ -386,26 +393,26 @@ export const updateGuestStatus = async (
 export const removeGuest = async (eventId: string, guestEmail: string): Promise<boolean> => {
   try {
     const eventRef = doc(db, 'events', eventId);
-    
+
     // Executar uma transação para garantir consistência
     return await runTransaction(db, async (transaction) => {
       const eventDoc = await transaction.get(eventRef);
-      
+
       if (!eventDoc.exists()) {
         console.log('Event not found:', eventId);
         return false;
       }
-      
+
       const event = eventDoc.data() as Event;
       const guests = event.guests || [];
-      
+
       // Remover o convidado da lista
       const updatedGuests = guests.filter(guest => guest.email !== guestEmail);
-      
+
       // Atualizar o evento com a lista de convidados atualizada
       transaction.update(eventRef, { guests: updatedGuests });
       console.log(`Guest ${guestEmail} removed from event ${eventId}`);
-      
+
       return true;
     });
   } catch (error) {
