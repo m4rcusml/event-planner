@@ -24,39 +24,68 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [userData, setUserData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  // Busca dados do usuário no Firestore e armazena localmente
+  const fetchAndStoreUserData = async (firebaseUser: User) => {
+    try {
+      const userDocRef = doc(db, 'users', firebaseUser.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      let data;
+      if (userDocSnap.exists()) {
+        data = userDocSnap.data();
+      } else {
+        data = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          createdAt: new Date().toISOString(),
+        };
+        await setDoc(userDocRef, data);
+      }
+
+      setUserData(data);
+      await AsyncStorage.setItem('@EventPlanner:userData', JSON.stringify(data));
+      return data;
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+      setUserData(null);
+      return null;
+    }
+  };
+
+  // Carrega usuário e dados do storage local
   useEffect(() => {
-    const loadStoredUser = async () => {
+    const loadStoredAuth = async () => {
+      setLoading(true);
       try {
-        // Check if there's a user in AsyncStorage
         const storedUser = await AsyncStorage.getItem('@EventPlanner:user');
         const storedUserData = await AsyncStorage.getItem('@EventPlanner:userData');
-        
+
         if (storedUser) {
-          setUser(JSON.parse(storedUser));
+          const parsedUser = JSON.parse(storedUser);
+          setUser(parsedUser);
+
           if (storedUserData) {
             setUserData(JSON.parse(storedUserData));
+          } else if (parsedUser.uid) {
+            await fetchAndStoreUserData(parsedUser);
           }
         }
       } catch (error) {
-        console.error('Error loading stored user:', error);
+        setUser(null);
+        setUserData(null);
+      } finally {
+        setLoading(false);
       }
     };
 
-    loadStoredUser();
+    loadStoredAuth();
 
-    // Listen to auth state changes
-    const unsubscribe = auth.onAuthStateChanged(async user => {
-      if (user) {
-        setUser(user);
-        await AsyncStorage.setItem('@EventPlanner:user', JSON.stringify(user));
-        
-        // Get user data from Firestore
-        const userDocRef = doc(db, 'users', user.uid);
-        const userDoc = await getDoc(userDocRef);
-        if (userDoc.exists()) {
-          setUserData(userDoc.data());
-          await AsyncStorage.setItem('@EventPlanner:userData', JSON.stringify(userDoc.data()));
-        }
+    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
+      setLoading(true);
+      if (firebaseUser) {
+        setUser(firebaseUser);
+        await AsyncStorage.setItem('@EventPlanner:user', JSON.stringify(firebaseUser));
+        await fetchAndStoreUserData(firebaseUser);
       } else {
         setUser(null);
         setUserData(null);
@@ -69,28 +98,37 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return () => unsubscribe();
   }, []);
 
+  // Faz logout e limpa tudo
   const handleSignOut = async () => {
     try {
       await signOut(auth);
+      setUser(null);
+      setUserData(null);
       await AsyncStorage.removeItem('@EventPlanner:user');
       await AsyncStorage.removeItem('@EventPlanner:userData');
-      setUser(null);
     } catch (error) {
       throw error;
     }
   };
 
-  const handleAddUserToLocalStorage = async (user: User, userDoc?: any) => {
+  // Adiciona usuário e dados ao storage e estado
+  const handleAddUserToLocalStorage = async (firebaseUser: User, userDoc?: any) => {
     try {
-      await AsyncStorage.setItem('@EventPlanner:user', JSON.stringify(user));
-      await AsyncStorage.setItem('@EventPlanner:userData', JSON.stringify(userDoc));
-      setUser(user);
-      setUserData(userDoc);
+      setUser(firebaseUser);
+      await AsyncStorage.setItem('@EventPlanner:user', JSON.stringify(firebaseUser));
+
+      if (userDoc) {
+        setUserData(userDoc);
+        await AsyncStorage.setItem('@EventPlanner:userData', JSON.stringify(userDoc));
+      } else {
+        await fetchAndStoreUserData(firebaseUser);
+      }
     } catch (error) {
       console.error('Error storing user:', error);
     }
   };
 
+  // Sempre repassa user e userData atualizados
   return (
     <AuthContext.Provider
       value={{
